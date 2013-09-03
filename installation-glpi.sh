@@ -16,17 +16,15 @@
 DIALOG=${DIALOG=dialog}
 
 
-serveur_installation=192.168.4.10
-utilisateur_installation=installation
-password_installation=installation
-base_installation=installation
+REPERTOIRE_CONFIG=/usr/local/installation/config
+FICHIER_CONFIG=config_centralisation
 
 
 password_root_linux=xxxxxxx
 password_root_mysql=directory
 
 
-serveur_source="S048"
+serveur_source="S068"
 serveur_destination=`uname -n`
 
 serveur_fusioninventory="172.16.4.88"
@@ -143,12 +141,88 @@ else
 
 fi
 
+#############################################################################
+# Fonction Lecture Fichier Configuration Gestion Centraliser
+#############################################################################
+
+lecture_config_centraliser()
+{
+
+if test -e $REPERTOIRE_CONFIG/$FICHIER_CONFIG ; then
+
+num=10
+while [ "$num" -le 15 ] 
+	do
+	VAR=VAR$num
+	VAL1=`cat $REPERTOIRE_CONFIG/$FICHIER_CONFIG | grep $VAR=`
+	VAL2=`expr length "$VAL1"`
+	VAL3=`expr substr "$VAL1" 7 $VAL2`
+	eval VAR$num="$VAL3"
+	num=`expr $num + 1`
+	done
+
+else 
+
+mkdir -p $REPERTOIRE_CONFIG
+
+num=10
+while [ "$num" -le 15 ] 
+	do
+	echo "VAR$num=" >> $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+	num=`expr $num + 1`
+	done
+
+num=10
+while [ "$num" -le 15 ] 
+	do
+	VAR=VALFIC$num
+	VAL1=`cat $REPERTOIRE_CONFIG/$FICHIER_CONFIG | grep $VAR=`
+	VAL2=`expr length "$VAL1"`
+	VAL3=`expr substr "$VAL1" 7 $VAL2`
+	eval VAR$num="$VAL3"
+	num=`expr $num + 1`
+	done
+
+fi
+
+if [ "$VAR10" = "" ] ; then
+	REF10=`uname -n`
+else
+	REF10=$VAR10
+fi
+
+if [ "$VAR11" = "" ] ; then
+	REF11=3306
+else
+	REF11=$VAR11
+fi
+
+if [ "$VAR12" = "" ] ; then
+	REF12=installation
+else
+	REF12=$VAR12
+fi
+
+if [ "$VAR13" = "" ] ; then
+	REF13=root
+else
+	REF13=$VAR13
+fi
+
+if [ "$VAR14" = "" ] ; then
+	REF14=directory
+else
+	REF14=$VAR14
+fi
+
+}
+
 
 #############################################################################
-# Fonction Inventaire Nouvelle Version D'installation
+# Fonction Inventaire Version Logiciel
 #############################################################################
 
-inventaire_nouvelle_version_installation()
+inventaire_version_logiciel()
 {
 
 
@@ -163,7 +237,7 @@ if [ -d /var/www/glpi ] ; then
 	where logiciel='glpi' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/version-reference.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp >/tmp/version-reference.txt
 
 	version_reference_glpi=$(sed '$!d' /tmp/version-reference.txt)
 	rm -f /tmp/version-reference.txt
@@ -176,7 +250,7 @@ if [ -d /var/www/glpi ] ; then
 	where logiciel='glpi' and uname='`uname -n`' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/version-installe.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp >/tmp/version-installe.txt
 
 	version_installe_glpi=$(sed '$!d' /tmp/version-installe.txt)
 	rm -f /tmp/version-installe.txt
@@ -185,6 +259,29 @@ fi
 
 }
 
+#############################################################################
+# Fonction Message d'erreur
+#############################################################################
+
+message_erreur()
+{
+	
+cat <<- EOF > /tmp/erreur
+Veuillez vous assurer que les parametres saisie
+                sont correcte
+EOF
+
+erreur=`cat /tmp/erreur`
+
+$DIALOG --ok-label "Quitter" \
+	 --colors \
+	 --backtitle "Installation Configuration GLPI" \
+	 --title "Erreur" \
+	 --msgbox  "\Z1$erreur\Zn" 6 52 
+
+rm -f /tmp/erreur
+
+}
 
 #############################################################################
 # Fonction Verification Couleur
@@ -193,61 +290,69 @@ fi
 verification_installation()
 {
 
-inventaire_nouvelle_version_installation
 
 # 0=noir, 1=rouge, 2=vert, 3=jaune, 4=bleu, 5=magenta, 6=cyan 7=blanc
+
+if ! grep -w "OUI" $REPERTOIRE_CONFIG/$FICHIER_CONFIG > /dev/null ; then
+	choix1="\Z1Gestion Centraliser des Installations\Zn" 
+else
+	choix1="\Z2Gestion Centraliser des Installations\Zn"  
+fi
 
 if [ ! -f /usr/bin/wget ] || [ ! -f /usr/share/php/DB.php ] || 
    [ ! -f /usr/share/php/Date.php ] || [ ! -f /usr/share/php/Mail.php ] ||
    [ ! -f /usr/share/php/Net/SMTP.php ] || [ ! -f /usr/share/php/Net/Socket.php ] ||
    [ ! -d /usr/share/doc/php5-imap ] || [ ! -d /usr/share/doc/php5-xmlrpc ] ; then
-	choix1="\Z1Installation Composant Complementaire\Zn" 
+	choix2="\Z1Installation Composant Complementaire\Zn" 
 else
-	choix1="\Z2Installation Composant Complementaire\Zn" 
+	choix2="\Z2Installation Composant Complementaire\Zn" 
 fi
 
-if [ ! -d /var/www/glpi ] ; then
-	choix2="\Z1Installation Serveur GLPI\Zn" 
+if [ ! -d /var/www/glpi ]  ; then
+	choix3="\Z1Installation Serveur GLPI\Zn" 
+
+elif [ "$VAR15" == "NON" ] ; then
+	choix3="\Z1Installation Serveur GLPI\Zn" 
 
 elif [ "$version_reference_glpi" != "$version_installe_glpi" ] ; then
-	choix2="\Zb\Z3Installation Serveur GLPI\Zn" 
+	choix3="\Zb\Z3Installation Serveur GLPI\Zn" 
 
 else
-	choix2="\Z2Installation Serveur GLPI\Zn" 
+	choix3="\Z2Installation Serveur GLPI\Zn" 
 fi
 
 if [ ! -d /usr/lib/perl/$version_perl/sys ] ||
    [ ! -f /etc/perl/CPAN/Config.pm ] ||
    [ ! -f /usr/local/share/perl/$version_perl/YAML.pm ] ||
    ! grep "'build_requires_install_policy' => q\[yes\]," /etc/perl/CPAN/Config.pm > /dev/null ; then
-	choix3="\Z1Installation PERL\Zn" 
+	choix4="\Z1Installation PERL\Zn" 
 else
-	choix3="\Z2Installation PERL\Zn" 
+	choix4="\Z2Installation PERL\Zn" 
 fi
 
 if [ ! -d /usr/local/share/perl/$version_perl/HTTP/Server ] ; then
-	choix4="\Z1Installation Modules Cpan\Zn" 
+	choix5="\Z1Installation Modules Cpan\Zn" 
 else
-	choix4="\Z2Installation Modules Cpan\Zn" 
+	choix5="\Z2Installation Modules Cpan\Zn" 
 fi
 
 if [ ! -f /usr/local/bin/fusioninventory-agent ] ; then
-	choix5="\Z1Installation Agent Fusioninventory\Zn" 
+	choix6="\Z1Installation Agent Fusioninventory\Zn" 
 else
-	choix5="\Z2Installation Agent Fusioninventory\Zn" 
+	choix6="\Z2Installation Agent Fusioninventory\Zn" 
 fi
 
 if [ ! -f /usr/local/etc/fusioninventory/agent.cfg ] ||
    ! grep -w "delaytime = 10" /usr/local/etc/fusioninventory/agent.cfg > /dev/null ; then
-	choix6="\Z1Configuration Agent Fusioninventory\Zn" 
+	choix7="\Z1Configuration Agent Fusioninventory\Zn" 
 else
-	choix6="\Z2Configuration Agent Fusioninventory\Zn" 
+	choix7="\Z2Configuration Agent Fusioninventory\Zn" 
 fi
 
 if [ ! -f /etc/init.d/fusioninventory ] || [ ! -f /var/run/fusioninventory-agent.pid ] ; then
-	choix7="\Z1Installation Daemon Fusioninventory\Zn" 
+	choix8="\Z1Installation Daemon Fusioninventory\Zn" 
 else
-	choix7="\Z2Installation Daemon Fusioninventory\Zn" 
+	choix8="\Z2Installation Daemon Fusioninventory\Zn" 
 fi
 
 }
@@ -259,6 +364,8 @@ fi
 menu()
 {
 
+lecture_config_centraliser
+inventaire_version_logiciel
 verification_installation
 
 fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/test$$
@@ -268,49 +375,57 @@ $DIALOG  --backtitle "Installation Configuration GLPI" \
 	  --title "Installation Configuration GLPI" \
 	  --clear \
 	  --colors \
-	  --default-item "5" \
-	  --menu "Quel est votre choix" 12 62 5 \
+	  --default-item "6" \
+	  --menu "Quel est votre choix" 14 62 6 \
 	  "1" "$choix1" \
 	  "2" "$choix2" \
-	  "3" "Replication Serveur GLPI" \
-	  "4" "Installation Agent Fusioninventory" \
-	  "5" "Quitter" 2> $fichtemp
+	  "3" "$choix3" \
+	  "4" "Replication Serveur GLPI" \
+	  "5" "Installation Agent Fusioninventory" \
+	  "6" "Quitter" 2> $fichtemp
 
 
 valret=$?
 choix=`cat $fichtemp`
 case $valret in
 
- 0)	# Installation Composant Complementaire
+ 0)	# Gestion Centraliser des Installations
 	if [ "$choix" = "1" ]
+	then
+		rm -f $fichtemp
+              menu_gestion_centraliser_installations
+	fi
+
+	# Installation Composant Complementaire
+	if [ "$choix" = "2" ]
 	then
 		rm -f $fichtemp
 		installation_composant_complementaire
 	fi
 
 	# Installation Serveur GLPI
-	if [ "$choix" = "2" ]
+	if [ "$choix" = "3" ]
 	then
 		rm -f $fichtemp
 		installation_serveur_glpi
 	fi
 
 	# Replication Serveur GLPI
-	if [ "$choix" = "3" ]
+	if [ "$choix" = "4" ]
 	then
 		rm -f $fichtemp
 		replication_serveur_glpi
 	fi
 
 	# Installation Agent Fusioninventory
-	if [ "$choix" = "4" ]
+	if [ "$choix" = "5" ]
 	then
 		rm -f $fichtemp
               menu_installation_agent_fusioninventory
 	fi
 
 	# Quitter
-	if [ "$choix" = "5" ]
+	if [ "$choix" = "6" ]
 	then
 		clear
 	fi
@@ -332,6 +447,90 @@ rm -f $fichtemp
 exit
 
 }
+
+#############################################################################
+# Fonction Menu Gestion Centraliser des Installations
+#############################################################################
+
+menu_gestion_centraliser_installations()
+{
+
+lecture_config_centraliser
+
+fichtemp=`tempfile 2>/dev/null` || fichtemp=/tmp/test$$
+
+
+$DIALOG  --backtitle "Installation Configuration GLPI" \
+	  --insecure \
+	  --title "Gestion Centraliser des Installations" \
+	  --mixedform "Quel est votre choix" 11 60 0 \
+	  "Nom Serveur:"     1 1  "$REF10"  1 24  28 26 0  \
+	  "Port Serveur:"    2 1  "$REF11"  2 24  28 26 0  \
+	  "Base de Donnees:" 3 1  "$REF12"  3 24  28 26 0  \
+	  "Compte Root:"     4 1  "$REF13"  4 24  28 26 0  \
+	  "Password Root:"   5 1  "$REF14"  5 24  28 26 1  2> $fichtemp
+
+
+valret=$?
+choix=`cat $fichtemp`
+case $valret in
+
+ 0)	# Gestion Centraliser des Installations
+	VARSAISI10=$(sed -n 1p $fichtemp)
+	VARSAISI11=$(sed -n 2p $fichtemp)
+	VARSAISI12=$(sed -n 3p $fichtemp)
+	VARSAISI13=$(sed -n 4p $fichtemp)
+	VARSAISI14=$(sed -n 5p $fichtemp)
+	
+
+	sed -i "s/VAR10=$VAR10/VAR10=$VARSAISI10/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+	sed -i "s/VAR11=$VAR11/VAR11=$VARSAISI11/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+	sed -i "s/VAR12=$VAR12/VAR12=$VARSAISI12/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+	sed -i "s/VAR13=$VAR13/VAR13=$VARSAISI13/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+	sed -i "s/VAR14=$VAR14/VAR14=$VARSAISI14/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+
+      
+	cat <<- EOF > /tmp/databases.txt
+	SHOW DATABASES;
+	EOF
+
+	mysql -h $VARSAISI10 -P $VARSAISI11 -u $VARSAISI13 -p$VARSAISI14 < /tmp/databases.txt &>/tmp/resultat.txt
+
+	if grep -w "^mysql" /tmp/resultat.txt > /dev/null ; then
+	sed -i "s/VAR15=$VAR15/VAR15=OUI/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+
+	cat <<- EOF > /tmp/creation_databases.txt
+	CREATE DATABASE IF NOT EXISTS $VARSAISI12;
+	EOF
+
+	mysql -h $VARSAISI10 -P $VARSAISI11 -u $VARSAISI13 -p$VARSAISI14 < /tmp/creation_databases.txt
+	rm -f /tmp/creation_databases.txt
+
+	else
+	sed -i "s/VAR15=$VAR15/VAR15=NON/g" $REPERTOIRE_CONFIG/$FICHIER_CONFIG
+	message_erreur
+	fi
+
+	rm -f /tmp/databases.txt
+	rm -f /tmp/resultat.txt
+	;;
+
+ 1)	# Appuyé sur Touche CTRL C
+	echo "Appuyé sur Touche CTRL C."
+	;;
+
+ 255)	# Appuyé sur Touche Echap
+	echo "Appuyé sur Touche Echap."
+	;;
+
+esac
+
+rm -f $fichtemp
+
+menu
+
+}
+
 
 #############################################################################
 # Fonction Menu Installation Agent Fusioninventory
@@ -480,7 +679,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	where logiciel='glpi' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/version-reference.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp >/tmp/version-reference.txt
 
 	version_reference=$(sed '$!d' /tmp/version-reference.txt)
 	rm -f /tmp/version-reference.txt
@@ -506,7 +705,7 @@ case $valret in
 	where logiciel='glpi' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/liste-version.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp >/tmp/liste-version.txt
 
 
 	if grep -w "$choix_version" /tmp/liste-version.txt > /dev/null ; then
@@ -562,7 +761,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	where logiciel='glpi' and version='$choix_version' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/url-fichier.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp >/tmp/url-fichier.txt
 
 	url_fichier=$(sed '$!d' /tmp/url-fichier.txt)
 	rm -f /tmp/url-fichier.txt
@@ -574,7 +773,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	where logiciel='glpi' and version='$choix_version' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/nom-fichier.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp >/tmp/nom-fichier.txt
 
 	nom_fichier=$(sed '$!d' /tmp/nom-fichier.txt)
 	rm -f /tmp/nom-fichier.txt
@@ -586,7 +785,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	where logiciel='glpi' and version='$choix_version' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp >/tmp/nom-repertoire.txt
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp < $fichtemp >/tmp/nom-repertoire.txt
 
 	nom_repertoire=$(sed '$!d' /tmp/nom-repertoire.txt)
 	rm -f /tmp/nom-repertoire.txt
@@ -608,9 +807,12 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	  --title "Installation Serveur GLPI" \
 	  --gauge "Installation Serveur GLPI" 10 60 0 \
 
-	
+	if [ -d /var/www/glpi-$version_installe_glpi ] ; then
+	rm -rf /var/www/glpi-$version_installe_glpi 
+	fi
+
 	if [ -d /var/www/glpi ] ; then
-	mv /var/www/glpi /var/www/$version_installe_glpi 
+	mv /var/www/glpi /var/www/glpi-$version_installe_glpi 
 	fi
 
 	cd /var/www/
@@ -618,7 +820,6 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	rm $nom_fichier
 	chown -R www-data /var/www/glpi/config
 	chown -R www-data /var/www/glpi/files
-
 
 (
  echo "90" ; sleep 1
@@ -632,7 +833,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	where logiciel='glpi' and uname='`uname -n`' ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp
 
 	rm -f $fichtemp
 
@@ -641,7 +842,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	values ( 'glpi' , '$choix_version' , '`uname -n`' , '`date +%d.%m.%Y`' , '`date +%Hh%M`' ) ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp
 
 	rm -f $fichtemp
 
@@ -650,7 +851,7 @@ $DIALOG  --backtitle "Installation Serveur GLPI" \
 	alter table inventaire order by uname ;
 	EOF
 
-	mysql -h $serveur_installation -u $utilisateur_installation -p$password_installation $base_installation < $fichtemp
+	mysql -h $VAR10 -P $VAR11 -u $VAR13 -p$VAR14 $VAR12 < $fichtemp
 
 	rm -f $fichtemp
 
